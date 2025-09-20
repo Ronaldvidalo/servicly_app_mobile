@@ -1,0 +1,76 @@
+// lib/widgets/notification_badge.dart
+
+import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+
+class NotificationBadge extends StatelessWidget {
+  final Widget child;
+  final String categoriaNotificacion;
+
+  const NotificationBadge({
+    super.key,
+    required this.child,
+    required this.categoriaNotificacion,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final userId = FirebaseAuth.instance.currentUser?.uid;
+    if (userId == null) return child;
+
+    return StreamBuilder<AggregateQuerySnapshot>(
+      // Usamos .count() que es súper eficiente para solo contar documentos
+      stream: FirebaseFirestore.instance
+          .collection('notificaciones')
+          .where('destinatarioId', isEqualTo: userId)
+          .where('leida', isEqualTo: false)
+          .where('categoriaNotificacion', isEqualTo: categoriaNotificacion)
+          .count()
+          .snapshots(),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData) {
+          return child;
+        }
+        
+        final int count = snapshot.data?.count ?? 0;
+        
+        // Si no hay notificaciones, muestra solo el texto del menú
+        if (count == 0) {
+          return child;
+        }
+
+        // Si hay notificaciones, muestra el badge sobre el texto
+        return Stack(
+          clipBehavior: Clip.none,
+          children: [
+            child,
+            Positioned(
+              top: -4,
+              right: -8,
+              child: Container(
+                padding: const EdgeInsets.all(5),
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.secondary,
+                  shape: BoxShape.circle,
+                ),
+                constraints: const BoxConstraints(minWidth: 20, minHeight: 20),
+                child: Center(
+                  child: Text(
+                    '$count',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+}

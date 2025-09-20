@@ -1,0 +1,67 @@
+import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
+
+// --- WIDGET REUTILIZABLE PARA SECCIONES DE COSTOS ---
+class SeccionDeCostoWidget<T> extends StatelessWidget {
+  final String title;
+  final double subtotal;
+  final List<T> items;
+  final VoidCallback onAdd;
+  final Widget Function(T item, int index) itemBuilder;
+  final bool isPremium;
+  final VoidCallback onUpgradeTap;
+  final VoidCallback onSelectFromCatalog;
+
+  const SeccionDeCostoWidget({
+    super.key,
+    required this.title,
+    required this.subtotal,
+    required this.items,
+    required this.onAdd,
+    required this.itemBuilder,
+    required this.isPremium,
+    required this.onUpgradeTap,
+    required this.onSelectFromCatalog,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      margin: const EdgeInsets.symmetric(vertical: 4), 
+      clipBehavior: Clip.antiAlias, 
+      child: ExpansionTile(
+        initiallyExpanded: true, 
+        title: Text(title, style: const TextStyle(fontWeight: FontWeight.w500)), 
+        trailing: Text(NumberFormat.currency(locale: 'es_AR', symbol: '\$').format(subtotal), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)), 
+        childrenPadding: const EdgeInsets.only(bottom: 8), 
+        children: [
+          if (items.isEmpty)
+            const Padding(
+              padding: EdgeInsets.all(16.0),
+              child: Text('No hay ítems agregados.', style: TextStyle(color: Colors.grey)),
+            ),
+          ...items.asMap().entries.map((entry) => itemBuilder(entry.value, entry.key)), 
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16.0), 
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                TextButton.icon(
+                  icon: Icon(Icons.list_alt, color: isPremium ? null : Colors.grey),
+                  label: Text('Seleccionar', style: TextStyle(color: isPremium ? null : Colors.grey)),
+                  onPressed: isPremium ? onSelectFromCatalog : onUpgradeTap,
+                ),
+                const SizedBox(width: 8),
+                FilledButton.icon(
+                  icon: const Icon(Icons.add),
+                  label: const Text('Añadir Manual'),
+                  onPressed: onAdd
+                ),
+              ],
+            )
+          )
+        ]
+      )
+    );
+  }
+}
