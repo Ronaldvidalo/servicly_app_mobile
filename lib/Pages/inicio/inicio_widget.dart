@@ -3,21 +3,16 @@
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:servicly_app/Pages/recuperar_pasword/recuperar_pasword_widget.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:google_sign_in/google_sign_in.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'dart:ui';
-import 'package:servicly_app/Pages/inicio/auth_wrapper.dart';
 import 'package:servicly_app/Pages/crear_cuenta/crear_cuenta_widget.dart';
 import 'package:app_links/app_links.dart';
-
-// Imports para la navegación por deep link
+import 'package:servicly_app/services/auth_service.dart';
 import 'package:servicly_app/pages/post_detalle/post_detalle_page.dart';
 import 'package:servicly_app/Pages/detalle_solicitud/detalle_solicitud_servicio_widget.dart';
 import 'package:servicly_app/models/solicitud_model.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
-
-String? referrerId;
 
 class InicioWidget extends StatefulWidget {
   final void Function(bool) onThemeChanged;
@@ -28,17 +23,19 @@ class InicioWidget extends StatefulWidget {
 }
 
 class _InicioWidgetState extends State<InicioWidget> {
-  // --- VARIABLES DE ESTADO RESTAURADAS ---
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   bool _showPassword = false;
   bool _loading = false;
   String? _error;
 
+  // ✅ PASO 2: Creamos una instancia de nuestro servicio
+  final AuthService _authService = AuthService();
+
   @override
   void initState() {
     super.initState();
-    _initAppLinks();
+    _initAppLinks(); // La lógica de deep links no cambia
   }
 
   @override
@@ -48,21 +45,20 @@ class _InicioWidgetState extends State<InicioWidget> {
     super.dispose();
   }
 
+  // --- La lógica de DEEP LINKS se mantiene sin cambios ---
   Future<void> _initAppLinks() async {
     final appLinks = AppLinks();
     final initialUri = await appLinks.getInitialAppLink();
-    if (initialUri != null) {
-      _handleLink(initialUri);
-    }
+    if (initialUri != null) _handleLink(initialUri);
     appLinks.uriLinkStream.listen((uri) {
-      if (mounted) {
-        _handleLink(uri);
-      }
+      if (mounted) _handleLink(uri);
     });
   }
 
   void _handleLink(Uri link) async {
-    if (link.pathSegments.contains('refer') && link.queryParameters.containsKey('by')) {
+    // ... tu código de _handleLink se mantiene exactamente igual ...
+    // No es necesario pegarlo aquí de nuevo, solo mantenlo como estaba.
+      if (link.pathSegments.contains('refer') && link.queryParameters.containsKey('by')) {
       setState(() {
         referrerId = link.queryParameters['by'];
         debugPrint('✅ Usuario referido por: $referrerId');
@@ -97,106 +93,52 @@ class _InicioWidgetState extends State<InicioWidget> {
       }
     }
   }
+  // --------------------------------------------------------
 
-  Future<void> _checkAndCreateUserProfile(User user) async {
-    final userDocRef = FirebaseFirestore.instance.collection('usuarios').doc(user.uid);
-    final docSnapshot = await userDocRef.get();
-    if (!docSnapshot.exists) {
-      await userDocRef.set({
-        'uid': user.uid,
-        'display_name': user.displayName ?? 'Usuario Anónimo',
-        'email': user.email,
-        'photo_url': user.photoURL,
-        'created_time': FieldValue.serverTimestamp(),
-        'rating': 0.0,
-        'ratingCount': 0,
-        'plan': 'fundador',
-        'esVerificado': false,
-        'profileComplete': false,
-        'referredBy': referrerId,
-        'referralCount': 0,
-      });
-      referrerId = null;
-    }
-  }
-
-  Future<void> _signInAndNavigate(Future<UserCredential?> Function() signInMethod) async {
+  // ✅ PASO 3: Simplificamos los métodos de login para que usen el servicio
+  Future<void> _signInWithGoogle() async {
     setState(() { _loading = true; _error = null; });
     try {
-      final userCredential = await signInMethod();
-      if (userCredential != null && userCredential.user != null) {
-        await _checkAndCreateUserProfile(userCredential.user!);
-        if (mounted) _showSuccessAndNavigate(userCredential);
-      } else {
-        if (mounted) setState(() => _loading = false);
-      }
+      await _authService.signInWithGoogle();
+      // ¡Ya no necesitamos navegar manualmente! El AuthWrapper lo hará por nosotros.
     } catch (e) {
       if (mounted) {
-        setState(() {
-          _error = "Ocurrió un error inesperado: ${e.toString()}";
-          _loading = false;
-        });
+        setState(() => _error = "Error al iniciar con Google.");
       }
-    }
-  }
-
-  Future<UserCredential?> _signInWithGoogle() async {
-    try {
-      final GoogleSignInAccount? googleUser = await GoogleSignIn().signIn();
-      if (googleUser == null) return null;
-      final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
-      final credential = GoogleAuthProvider.credential(
-        accessToken: googleAuth.accessToken,
-        idToken: googleAuth.idToken,
-      );
-      return await FirebaseAuth.instance.signInWithCredential(credential);
-    } catch (e) {
-      if (mounted) setState(() => _error = "Error con Google: ${e.toString()}");
-      return null;
-    }
-  }
-
-  Future<void> _loginWithEmail() async {
-    setState(() { _loading = true; _error = null; });
-    try {
-      await FirebaseAuth.instance.signInWithEmailAndPassword(
-        email: _emailController.text.trim(),
-        password: _passwordController.text,
-      );
-      if (!mounted) return;
-      _navigateToHome();
-    } on FirebaseAuthException catch (e) {
-      String errorMessage = "Ocurrió un error.";
-      if (e.code == 'user-not-found' || e.code == 'INVALID_LOGIN_CREDENTIALS') {
-        errorMessage = 'Correo o contraseña incorrectos.';
-      } else if (e.code == 'wrong-password') {
-        errorMessage = 'La contraseña es incorrecta.';
-      } else if (e.code == 'invalid-email') {
-        errorMessage = 'El formato del correo no es válido.';
-      }
-      if (mounted) setState(() => _error = errorMessage);
     } finally {
       if (mounted) setState(() => _loading = false);
     }
   }
 
-  void _showSuccessAndNavigate(UserCredential userCredential) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('¡Bienvenido, ${userCredential.user?.displayName ?? 'usuario'}!')),
-    );
-    _navigateToHome();
-  }
-  
-  void _navigateToHome() {
-    Navigator.pushReplacement(
-      context,
-      MaterialPageRoute(builder: (context) => AuthWrapper(onThemeChanged: widget.onThemeChanged)),
-    );
+  Future<void> _signInWithEmail() async {
+    setState(() { _loading = true; _error = null; });
+    try {
+      await _authService.signInWithEmailAndPassword(
+        _emailController.text.trim(),
+        _passwordController.text,
+      );
+    } on FirebaseAuthException catch (e) {
+        String errorMessage = "Ocurrió un error.";
+        if (e.code == 'user-not-found' || e.code == 'INVALID_LOGIN_CREDENTIALS') {
+            errorMessage = 'Correo o contraseña incorrectos.';
+        } else if (e.code == 'wrong-password') {
+            errorMessage = 'La contraseña es incorrecta.';
+        } else if (e.code == 'invalid-email') {
+            errorMessage = 'El formato del correo no es válido.';
+        }
+        if (mounted) setState(() => _error = errorMessage);
+    } catch (e) {
+        if (mounted) setState(() => _error = "Ocurrió un error inesperado.");
+    } finally {
+        if (mounted) setState(() => _loading = false);
+    }
   }
 
-  // --- MÉTODO build Y HELPERS RESTAURADOS ---
+  // --- El método build y los helpers de UI se mantienen sin cambios ---
   @override
   Widget build(BuildContext context) {
+    // ... tu código del método build se mantiene exactamente igual ...
+    // Los botones ahora llamarán a _signInWithGoogle y _signInWithEmail
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
 
@@ -375,7 +317,7 @@ class _InicioWidgetState extends State<InicioWidget> {
         ],
       ),
       child: ElevatedButton(
-        onPressed: _loading ? null : _loginWithEmail,
+        onPressed: _loading ? null : _signInWithEmail,
         style: ElevatedButton.styleFrom(
           backgroundColor: Colors.transparent,
           shadowColor: Colors.transparent,
@@ -396,7 +338,7 @@ class _InicioWidgetState extends State<InicioWidget> {
         SocialIconButton(
           icon: FontAwesomeIcons.google,
           color: const Color(0xFFDB4437),
-          onPressed: _loading ? null : () => _signInAndNavigate(_signInWithGoogle),
+          onPressed: _loading ? null : _signInWithGoogle,
         ),
       ],
     );

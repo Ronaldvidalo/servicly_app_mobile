@@ -1,11 +1,11 @@
+// lib/Pages/crear_cuenta/crear_cuenta_widget.dart
+
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:servicly_app/Pages/inicio/auth_wrapper.dart';
 import 'package:servicly_app/widgets/app_background.dart';
 import 'dart:ui';
 import 'dart:developer' as developer;
-import 'package:servicly_app/Pages/inicio/inicio_widget.dart';
+import 'package:servicly_app/services/auth_service.dart';
 
 class CrearCuentaWidget extends StatefulWidget {
   const CrearCuentaWidget({super.key});
@@ -16,15 +16,16 @@ class CrearCuentaWidget extends StatefulWidget {
 
 class _CrearCuentaWidgetState extends State<CrearCuentaWidget> {
   final _formKey = GlobalKey<FormState>();
-  final TextEditingController _nombreController = TextEditingController();
-  final TextEditingController _emailController = TextEditingController();
-  final TextEditingController _passwordController = TextEditingController();
-  final TextEditingController _confirmPasswordController =
-      TextEditingController();
+  final _nombreController = TextEditingController();
+  final _emailController = TextEditingController();
+  final _passwordController = TextEditingController();
+  final _confirmPasswordController = TextEditingController();
 
   bool _loading = false;
   bool _showPassword = false;
   bool _showConfirmPassword = false;
+
+  final AuthService _authService = AuthService();
 
   @override
   void dispose() {
@@ -35,55 +36,26 @@ class _CrearCuentaWidgetState extends State<CrearCuentaWidget> {
     super.dispose();
   }
 
+  // ✅ MÉTODO CORREGIDO
   Future<void> _crearCuenta() async {
-    if (!_formKey.currentState!.validate()) {
-      return;
-    }
+    if (!_formKey.currentState!.validate()) return;
+    
     setState(() => _loading = true);
 
     try {
-      final UserCredential userCredential =
-          await FirebaseAuth.instance.createUserWithEmailAndPassword(
+      final userCredential = await _authService.signUpWithEmailAndPassword(
         email: _emailController.text.trim(),
         password: _passwordController.text.trim(),
+        displayName: _nombreController.text.trim(),
       );
 
-      final User? user = userCredential.user;
-      if (user == null) {
-        throw Exception("No se pudo obtener el objeto User.");
+    
+      if (userCredential != null && mounted) {
+              Navigator.of(context).pop();
       }
 
-      await user.updateDisplayName(_nombreController.text.trim());
-
-      // --- MODIFICACIÓN AQUÍ PARA AÑADIR REFERIDOS ---
-      await FirebaseFirestore.instance.collection('usuarios').doc(user.uid).set({
-        'uid': user.uid,
-        'display_name': _nombreController.text.trim(),
-        'email': _emailController.text.trim(),
-        'photo_url': null,
-        'created_time': FieldValue.serverTimestamp(),
-        'rating': 0.0,
-        'ratingCount': 0,
-        'plan': 'fundador',
-        'esVerificado': false,
-        'profileComplete': false,
-        // --- CAMPOS DE REFERIDOS AÑADIDOS ---
-        'referredBy': referrerId, // Guardamos el ID capturado (puede ser null)
-        'referralCount': 0,      // El nuevo usuario siempre empieza con 0
-      });
-      
-      // Limpiamos la variable global para futuros registros
-      referrerId = null;
-
-      if (mounted) {
-        Navigator.of(context).pushAndRemoveUntil(
-          MaterialPageRoute(
-            builder: (context) => AuthWrapper(onThemeChanged: (isDark) {}),
-          ),
-          (route) => false,
-        );
-      }
     } on FirebaseAuthException catch (e) {
+      // Tu manejo de errores se mantiene igual, está perfecto.
       String errorMessage = 'Ocurrió un error de autenticación.';
       if (e.code == 'weak-password') {
         errorMessage = 'La contraseña es muy débil (mínimo 6 caracteres).';
@@ -92,9 +64,6 @@ class _CrearCuentaWidgetState extends State<CrearCuentaWidget> {
       } else if (e.code == 'invalid-email') {
         errorMessage = 'El formato del correo no es válido.';
       }
-      
-      developer.log('FirebaseAuthException:', error: e, name: 'CrearCuenta');
-
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(errorMessage), backgroundColor: Colors.red),
@@ -102,24 +71,23 @@ class _CrearCuentaWidgetState extends State<CrearCuentaWidget> {
       }
     } catch (e) {
       developer.log('Error inesperado al crear cuenta:', error: e, name: 'CrearCuenta');
-
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Ocurrió un error inesperado. Revisa tu conexión o inténtalo más tarde.'),
+            content: Text('Ocurrió un error inesperado.'),
             backgroundColor: Colors.red,
           ),
         );
       }
     } finally {
-      if (mounted) {
-        setState(() => _loading = false);
-      }
+      if (mounted) setState(() => _loading = false);
     }
   }
-
+  
   @override
   Widget build(BuildContext context) {
+    // El resto de tu archivo (el método build y sus helpers) no necesita ningún cambio.
+    // Simplemente asegúrate de que esta función _crearCuenta esté actualizada.
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
 
@@ -237,7 +205,7 @@ class _CrearCuentaWidgetState extends State<CrearCuentaWidget> {
     );
   }
 
-  Widget _buildTextField({
+    Widget _buildTextField({
     required TextEditingController controller,
     required String labelText,
     required IconData icon,

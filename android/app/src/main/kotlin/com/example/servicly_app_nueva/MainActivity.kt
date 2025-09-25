@@ -1,4 +1,4 @@
-package com.example.servicly_app_nueva
+package app.servicly.mobile
 
 import io.flutter.embedding.android.FlutterActivity
 

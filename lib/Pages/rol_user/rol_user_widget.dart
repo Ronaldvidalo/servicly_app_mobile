@@ -1,10 +1,10 @@
+// lib/Pages/rol_user/rol_user_widget.dart
+
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:servicly_app/Pages/home/home_widget.dart';
 import 'package:servicly_app/widgets/app_background.dart';
 import 'package:servicly_app/Pages/inicio_seletc_categoria/inicio_seletc_categoria_widget.dart';
-
 
 class RolUserWidget extends StatefulWidget {
   final String seleccionpais;
@@ -40,6 +40,7 @@ class _RolUserWidgetState extends State<RolUserWidget> {
     {'label': 'Ambas', 'value': 'Ambos', 'icon': Icons.sync_alt_rounded, 'color': ambosColor},
   ];
 
+  // ✅ FUNCIÓN CORREGIDA
   Future<void> _guardarRolYContinuar() async {
     if (_rolSeleccionado == null || _isSaving) return;
     setState(() => _isSaving = true);
@@ -54,36 +55,40 @@ class _RolUserWidgetState extends State<RolUserWidget> {
     }
 
     try {
-      // Guardamos solo el rol aquí. La info de perfil se completará al final del flujo.
-      await FirebaseFirestore.instance.collection('usuarios').doc(user.uid).set({
-        'rol_user': _rolSeleccionado,
-      }, SetOptions(merge: true));
-
-      if (!mounted) return;
-
       if (_rolSeleccionado == 'Cliente') {
-        // Para clientes, marcamos el perfil como completo y vamos al Home.
-        await FirebaseFirestore.instance.collection('usuarios').doc(user.uid).set({
+        await FirebaseFirestore.instance.collection('usuarios').doc(user.uid).update({
+          'rol_user': _rolSeleccionado,
           'profileComplete': true,
-          'zonasNotificacionConfiguradas': true,
-        }, SetOptions(merge: true));
+        });
         
-        Navigator.pushAndRemoveUntil(context, MaterialPageRoute(
-          builder: (context) => HomeWidget(onThemeChanged: widget.onThemeChanged, userRol: _rolSeleccionado),
-        ), (route) => false);
+        if (mounted) {
+          Navigator.of(context).popUntil((route) => route.isFirst);
+        }
 
       } else {
-        // AHORA: Los PROVEEDORES van primero a la página de SELECCIÓN DE CATEGORÍA.
-        Navigator.push(context, MaterialPageRoute(
-          builder: (context) => InicioSeletcCategoriaWidget(
-            seleccionpais1: widget.seleccionpais,
-            provincias: widget.provincias,
-            userRol: _rolSeleccionado,
-            banderaPais: widget.banderaPais,
-            ivaAsignado: widget.ivaAsignado,
-            onThemeChanged: widget.onThemeChanged,
-          ),
-        ));
+        await FirebaseFirestore.instance.collection('usuarios').doc(user.uid).update({
+          'rol_user': _rolSeleccionado,
+        });
+
+        // ✅ CORRECCIÓN: Añadimos todos los parámetros requeridos
+        if (mounted) {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => InicioSeletcCategoriaWidget(
+                // Datos que vienen de la pantalla anterior
+                seleccionpais1: widget.seleccionpais,
+                provincias: widget.provincias,
+                banderaPais: widget.banderaPais,
+                ivaAsignado: widget.ivaAsignado,
+                // Dato que se seleccionó en ESTA pantalla
+                userRol: _rolSeleccionado!, // Usamos '!' porque sabemos que no es nulo aquí
+                // Callback del tema
+                onThemeChanged: widget.onThemeChanged,
+              )
+            ),
+          );
+        }
       }
     } catch (e) {
       if (mounted) {
@@ -96,6 +101,7 @@ class _RolUserWidgetState extends State<RolUserWidget> {
 
   @override
   Widget build(BuildContext context) {
+    // El método build no necesita cambios
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
 
@@ -106,7 +112,7 @@ class _RolUserWidgetState extends State<RolUserWidget> {
         backgroundColor: Colors.transparent,
         elevation: 0,
         foregroundColor: colorScheme.onSurface,
-        automaticallyImplyLeading: false, // Evita que aparezca la flecha de atrás
+        automaticallyImplyLeading: false,
       ),
       bottomNavigationBar: _buildBottomBar(),
       body: AppBackground(
@@ -161,6 +167,7 @@ class _RolUserWidgetState extends State<RolUserWidget> {
     required bool isSelected,
     required VoidCallback onTap,
   }) {
+    // Este widget no necesita cambios
     final colorScheme = Theme.of(context).colorScheme;
     const double size = 160.0;
 
@@ -207,14 +214,14 @@ class _RolUserWidgetState extends State<RolUserWidget> {
   }
 
   Widget _buildBottomBar() {
+    // Este widget no necesita cambios
     return SafeArea(
       child: Container(
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
         color: Theme.of(context).colorScheme.surface.withAlpha((255 * 0.8).round()),
         child: Row(
-          mainAxisAlignment: MainAxisAlignment.center, // Centramos el único botón
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            // El botón de atrás se elimina para seguir el flujo hacia adelante
             Expanded(
               child: Container(
                 decoration: BoxDecoration(

@@ -8,6 +8,7 @@ import 'package:servicly_app/pages/Post.app/crear_post/crear_post_widget.dart';
 import 'package:servicly_app/pages/chat/lista_chats_page.dart';
 import 'package:servicly_app/new_solicitud_servicio/new_solicitud_servicio.dart';
 import 'package:servicly_app/precios_y_servicios/mis_precios_servicios_page.dart';
+import 'package:servicly_app/services/auth_service.dart';
 import 'package:servicly_app/widgets/Top_Users_Row.dart';
 import 'package:servicly_app/widgets/post_card_widget.dart';
 import 'package:servicly_app/pages/perfil_pagina/perfil_pagina_widget.dart';
@@ -57,29 +58,51 @@ class _HomeWidgetState extends State<HomeWidget> with TickerProviderStateMixin {
 
   Future<void> _loadUserData() async {
     final user = FirebaseAuth.instance.currentUser;
-    if (user != null) {
-      try {
-        final userDoc = await FirebaseFirestore.instance.collection('usuarios').doc(user.uid).get();
-        if (userDoc.exists && mounted) {
-          final userData = userDoc.data()!;
+    if (user == null) {
+      _setDefaultValues();
+      return;
+    }
+
+    try {
+      final userDoc = await FirebaseFirestore.instance.collection('usuarios').doc(user.uid).get();
+
+      if (userDoc.exists && mounted) {
+        final userData = userDoc.data()!;
+        final role = userData['rol_user'] as String?;
+        final country = userData['pais'] as String?;
+
+        // ✅ ¡AQUÍ ESTÁ LA LÓGICA DE VALIDACIÓN!
+        if (role != null && country != null) {
+          // Si ambos campos existen, procedemos con normalidad.
           setState(() {
-            _currentUserRole = widget.userRol ?? userData['rol_user'] as String?;
-            _currentUserCountry = userData['pais'] as String?;
+            _currentUserRole = widget.userRol ?? role;
+            _currentUserCountry = country;
           });
           _updateTabControllerBasedOnRole();
         } else {
-          _setDefaultValues();
-        }
-      } catch (e) {
-        if (mounted) {
+          // ESTADO INCONSISTENTE: Perfil "completo" pero faltan datos esenciales.
+          print("Error crítico: El perfil del usuario ${user.uid} está marcado como completo pero faltan 'rol_user' o 'pais'. Forzando cierre de sesión.");
+          
+          // Muestra un mensaje al usuario antes de salir.
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Error al cargar datos del perfil: $e')),
+            const SnackBar(content: Text('Hubo un problema con tu perfil. Por favor, inicia sesión de nuevo.')),
           );
-          _setDefaultValues();
+          
+          // Usa tu AuthService para cerrar la sesión y limpiar todo.
+          await AuthService().signOut();
+          // El AuthWrapper se encargará de redirigir a la pantalla de login.
         }
+      } else if (mounted) {
+        _setDefaultValues();
       }
-    } else {
-      _setDefaultValues();
+    } catch (e) {
+      if (mounted) {
+        print("Error al cargar datos del perfil: $e");
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error al cargar datos del perfil: $e')),
+        );
+        _setDefaultValues();
+      }
     }
   }
 

@@ -1,6 +1,12 @@
+// lib/Pages/seleccion_pais/seleccion_pais_widget.dart
+
 import 'package:flutter/material.dart';
 import 'package:servicly_app/Pages/seleccion_provincia_widget.dart/seleccion_provincia_widget.dart';
 import 'package:servicly_app/widgets/app_background.dart';
+
+// ✅ 1. Importa los paquetes de Firebase que necesitamos
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class SeleccionPaisWidget extends StatefulWidget {
   final void Function(bool) onThemeChanged;
@@ -15,7 +21,6 @@ class SeleccionPaisWidget extends StatefulWidget {
 }
 
 class _SeleccionPaisWidgetState extends State<SeleccionPaisWidget> {
-  // Se restaura la lista original con todos los datos.
   final List<Map<String, dynamic>> paises = [
     {'nombre': 'Argentina', 'bandera': 'assets/images/Argentina.png', 'ivaAsignado': 0.21},
     {'nombre': 'Brasil', 'bandera': 'assets/images/brasil.jpeg', 'ivaAsignado': 0.17},
@@ -26,11 +31,66 @@ class _SeleccionPaisWidgetState extends State<SeleccionPaisWidget> {
   ];
 
   String? paisSeleccionado;
-  // Se mantiene la variable para el IVA, como solicitaste.
   double? ivaPaisSeleccionado;
+
+  // ✅ 2. Añadimos una variable de estado para la carga
+  bool _isLoading = false;
+
+  // ✅ 3. Creamos la nueva función para guardar y continuar
+  Future<void> _guardarPaisYContinuar() async {
+    if (paisSeleccionado == null) return;
+
+    setState(() => _isLoading = true);
+
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      // Si por alguna razón no hay usuario, detenemos la carga y salimos.
+      if (mounted) setState(() => _isLoading = false);
+      return;
+    }
+
+    try {
+      // Guardamos los datos en el documento del usuario en Firestore
+      await FirebaseFirestore.instance.collection('usuarios').doc(user.uid).update({
+        'pais': paisSeleccionado,
+        'ivaAsignado': ivaPaisSeleccionado,
+      });
+
+      // Si se guardó correctamente, navegamos a la siguiente pantalla
+      if (mounted) {
+        final String banderaPais = paises.firstWhere(
+            (p) => p['nombre'] == paisSeleccionado)['bandera'];
+        
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => SeleccionProvinciaWidget(
+              paisSeleccionado: paisSeleccionado!,
+              ivaAsignado: ivaPaisSeleccionado!,
+              banderaPais: banderaPais,
+              onThemeChanged: widget.onThemeChanged,
+            ),
+          ),
+        );
+      }
+    } catch (e) {
+      // Si hay un error, lo mostramos en un SnackBar
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error al guardar tu selección: $e')),
+        );
+      }
+    } finally {
+      // Nos aseguramos de detener la carga, incluso si hay un error
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
+    // El método build se mantiene casi igual
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final isLargeScreen = MediaQuery.of(context).size.width > 600;
@@ -76,7 +136,6 @@ class _SeleccionPaisWidgetState extends State<SeleccionPaisWidget> {
                       final seleccionado = paisSeleccionado == pais['nombre'];
                       return GestureDetector(
                         onTap: () {
-                          // Al tocar, guardamos tanto el nombre como el IVA.
                           setState(() {
                             paisSeleccionado = pais['nombre'];
                             ivaPaisSeleccionado = pais['ivaAsignado'];
@@ -165,26 +224,10 @@ class _SeleccionPaisWidgetState extends State<SeleccionPaisWidget> {
         ],
       ),
       child: ElevatedButton(
-        onPressed: paisSeleccionado == null
+        // ✅ 4. El botón ahora llama a nuestra nueva función y se desactiva si está cargando
+        onPressed: paisSeleccionado == null || _isLoading
             ? null
-            : () {
-                // Buscamos la bandera correspondiente al país seleccionado
-                final String banderaPais = paises.firstWhere(
-                    (p) => p['nombre'] == paisSeleccionado)['bandera'];
-
-                // La navegación ahora pasa todos los datos necesarios.
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => SeleccionProvinciaWidget(
-                      paisSeleccionado: paisSeleccionado!,
-                      ivaAsignado: ivaPaisSeleccionado!,
-                      banderaPais: banderaPais,
-                      onThemeChanged: widget.onThemeChanged,
-                    ),
-                  ),
-                );
-              },
+            : _guardarPaisYContinuar,
         style: ElevatedButton.styleFrom(
           backgroundColor: Colors.transparent,
           shadowColor: Colors.transparent,
@@ -193,11 +236,18 @@ class _SeleccionPaisWidgetState extends State<SeleccionPaisWidget> {
               RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
           disabledBackgroundColor: Colors.grey.withAlpha(100),
         ),
-        child: const Text(
-          'Continuar',
-          style: TextStyle(
-              fontSize: 18, color: Colors.white, fontWeight: FontWeight.bold),
-        ),
+        // ✅ 5. Mostramos un indicador de carga si es necesario
+        child: _isLoading
+            ? const SizedBox(
+                width: 24,
+                height: 24,
+                child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+              )
+            : const Text(
+                'Continuar',
+                style: TextStyle(
+                    fontSize: 18, color: Colors.white, fontWeight: FontWeight.bold),
+              ),
       ),
     );
   }
